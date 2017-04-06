@@ -3,6 +3,7 @@
  Part of Grbl
  
  Copyright (c) 2009-2011 Simen Svale Skogsrud
+ Copyright (C) 2015-2016 Aleph Objects Inc.
  
  Grbl is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
@@ -55,6 +56,7 @@
 #include "planner.h"
 #include "stepper.h"
 #include "temperature.h"
+#include "ConfigurationStore.h"
 #include "ultralcd.h"
 #include "language.h"
 
@@ -63,10 +65,9 @@
 //===========================================================================
 
 unsigned long minsegmenttime;
-float max_feedrate[4]; // set the max speeds
-float axis_steps_per_unit[4];
-float e1_steps_per_unit;
-unsigned long max_acceleration_units_per_sq_second[4]; // Use M201 to override by software
+float max_feedrate[NUM_AXIS]; // set the max speeds
+float axis_steps_per_unit[NUM_AXIS];
+unsigned long max_acceleration_units_per_sq_second[NUM_AXIS]; // Use M201 to override by software
 float minimumfeedrate;
 float acceleration;         // Normal acceleration mm/s^2  THIS IS THE DEFAULT ACCELERATION for all moves. M204 SXXXX
 float retract_acceleration; //  mm/s^2   filament pull-pack and push-forward  while standing still in the other axis M204 TXXXX
@@ -75,6 +76,27 @@ float max_z_jerk;
 float max_e_jerk;
 float mintravelfeedrate;
 unsigned long axis_steps_per_sqr_second[NUM_AXIS];
+bool jumpstart_fan = true;
+#ifdef RESUME_FEATURE
+  float planner_disabled_below_z = 0;
+  uint32_t sd_position = 0;
+  float last_z = 0;
+  bool z_reached = false;
+  bool layer_reached = false;
+  bool hops = false;
+  bool gone_up = false;
+  bool sd_position_set = false;
+  extern bool move_z_before_resume;
+  bool print_resumed = false;
+#endif //RESUME_FEATURE
+#ifdef TRACK_LAYER
+  unsigned short current_layer = 0;
+  float last_layer_z = 0;
+  #ifndef RESUME_FEATURE
+    bool gone_up = false;
+    float last_z = 0;
+  #endif //RESUME_FEATURE
+#endif //TRACK_LAYER
 
 #ifdef ENABLE_AUTO_BED_LEVELING
 // this holds the required transform to compensate for bed level
@@ -86,8 +108,8 @@ matrix_3x3 plan_bed_level_matrix = {
 #endif // #ifdef ENABLE_AUTO_BED_LEVELING
 
 // The current position of the tool in absolute steps
-long position[4];   //rescaled from extern when axis_steps_per_unit are changed by gcode
-static float previous_speed[4]; // Speed of previous path line segment
+long position[NUM_AXIS];   //rescaled from extern when axis_steps_per_unit are changed by gcode
+static float previous_speed[NUM_AXIS]; // Speed of previous path line segment
 static float previous_nominal_speed; // Nominal speed of previous path line segment
 
 #ifdef AUTOTEMP
@@ -96,6 +118,8 @@ float autotemp_min=210;
 float autotemp_factor=0.1;
 bool autotemp_enabled=false;
 #endif
+
+unsigned char g_uc_extruder_last_move[3] = {0,0,0};
 
 //===========================================================================
 //=================semi-private variables, used in inline  functions    =====
@@ -116,6 +140,10 @@ float extrude_min_temp=EXTRUDE_MINTEMP;
 static unsigned char old_direction_bits = 0;               // Old direction bits. Used for speed calculations
 static long x_segment_time[3]={MAX_FREQ_TIME + 1,0,0};     // Segment times (in us). Used for speed calculations
 static long y_segment_time[3]={MAX_FREQ_TIME + 1,0,0};
+#endif
+
+#ifdef FILAMENT_SENSOR
+ static char meas_sample; //temporary variable to hold filament measurement sample
 #endif
 
 // Returns the index of the next block in the ring buffer
@@ -449,7 +477,6 @@ void check_axes_activity()
   unsigned char z_active = 0;
   unsigned char e_active = 0;
   unsigned int tail_fan_speed = fanSpeed;
-  unsigned int tail_fan_speed1 = fanSpeed1;
   #ifdef BARICUDA
   unsigned char tail_valve_pressure = ValvePressure;
   unsigned char tail_e_to_p_pressure = EtoPPressure;
@@ -460,7 +487,6 @@ void check_axes_activity()
   {
     uint8_t block_index = block_buffer_tail;
     tail_fan_speed = block_buffer[block_index].fan_speed;
-	tail_fan_speed1 = block_buffer[block_index].fan_speed1;
     #ifdef BARICUDA
     tail_valve_pressure = block_buffer[block_index].valve_pressure;
     tail_e_to_p_pressure = block_buffer[block_index].e_to_p_pressure;
@@ -487,7 +513,7 @@ void check_axes_activity()
 #if defined(FAN_PIN) && FAN_PIN > -1
   #ifdef FAN_KICKSTART_TIME
     static unsigned long fan_kick_end;
-    if (tail_fan_speed >= 70) {
+    if (tail_fan_speed) {
       if (fan_kick_end == 0) {
         // Just starting up fan - run at full power.
         fan_kick_end = millis() + FAN_KICKSTART_TIME;
@@ -501,35 +527,32 @@ void check_axes_activity()
   #endif//FAN_KICKSTART_TIME
   #ifdef FAN_SOFT_PWM
   fanSpeedSoftPwm = tail_fan_speed;
-  fanSpeedSoftPwm1 = tail_fan_speed1;
   #else
-     #if defined(EXTRUDER_FAN_SETUP) && EXTRUDER_FAN_SETUP > -1
-	    #if EXTRUDER_FAN_SETUP == 1 || EXTRUDER_FAN_SETUP == 4     // EXTRUDER_FAN_SETUP = 1 OR 4
-		    analogWrite(EX_FAN_0,tail_fan_speed);
-		#endif 
-	    #if EXTRUDER_FAN_SETUP == 2                           // EXTRUDER_FAN_SETUP =2
-			if (active_FAN == 0){                                       // Sets EX_FAN_0 to speed set by M106/M107 and turns off EX_FAN_1
-				analogWrite(EX_FAN_0,tail_fan_speed);
-				analogWrite(EX_FAN_1,0);
-			}
-			else if  (active_FAN == 1){                                 // Sets EX_FAN_0 to speed set by M106/M107 and turns off EX_FAN_1
-				analogWrite(EX_FAN_0,0);
-				analogWrite(EX_FAN_1,tail_fan_speed);
-			}
-		#endif 
-		#if EXTRUDER_FAN_SETUP == 3                           // EXTRUDER_FAN_SETUP = 3
-                        if(tail_fan_speed < 70)
-                          digitalWrite(EX_FAN_0, LOW);
-                        else
-                        {
-                          sbi(TCCR4A, COM4C1);
-                            OCR4C = ((tail_fan_speed-55)*208 + 12495); // set pwm duty, (2^16-1) is the top of the counter
-                        }
-	    #endif 
-	 #endif  // EXTRUDER_FAN_SETUP
-  #endif //!FAN_SOFT_PWM
-#endif//FAN_PIN > -1
+  if(tail_fan_speed == 0)
+  {
+    digitalWrite(FAN_PIN, LOW);
+    jumpstart_fan = true;
+  }
+  else if(tail_fan_speed == 255)
+    digitalWrite(FAN_PIN, HIGH);
+  else
+  {
+    static unsigned long jumpstart_time = 0;
+    if(jumpstart_fan)
+    {
+      jumpstart_fan = false;
+      jumpstart_time = millis();
+    }
 
+    //analogWrite(FAN_PIN,tail_fan_speed);
+    sbi(TCCR4A, COM4C1);
+    if((tail_fan_speed*208 + 12495) < 25000 && (millis() - jumpstart_time) < 250)
+      OCR4C = 32768;
+    else
+      OCR4C = (tail_fan_speed*208 + 12495); // set pwm duty, (2^8-1) is the top of the counter
+  }
+  #endif//!FAN_SOFT_PWM
+#endif//FAN_PIN > -1
 #ifdef AUTOTEMP
   getHighESpeed();
 #endif
@@ -545,6 +568,126 @@ void check_axes_activity()
 #endif
 }
 
+#ifdef RESUME_FEATURE
+
+  bool floor_z(const float &z)
+  {
+    if(resume_print)
+    {
+      if(check_if_sdprinting() && get_sdposition() >= sd_position && !resume_z)
+      {
+        sd_position_set = false;
+        resume_print = false;
+        print_resumed = true;
+        return false;
+      }
+      else if(check_if_sdprinting() && !resume_z)
+        return true;
+      // filter out moves below a given floor height and attempt to ignore any hops/travels
+      if (planner_disabled_below_z > 0.0 && !layer_reached) {
+        if (z < planner_disabled_below_z) {
+          if (z > last_z && !gone_up) // up once
+            gone_up = true;
+          else if (z < last_z) { // back down
+            hops = true;
+            gone_up = false;
+          }
+          else if (z > last_z && gone_up) // up twice
+            hops = false;
+          z_reached = false;
+          last_z = z;
+          return true;
+        }
+        else if (hops && !z_reached) {
+          z_reached = true;
+          last_z = z;
+          return true;
+        }
+        else if (hops && z == last_z)
+          return true;
+        else
+          layer_reached = true;
+      }
+      else if (planner_disabled_below_z && z < planner_disabled_below_z) {
+        z_reached = false;
+        layer_reached = false;
+        return true;
+      }
+      else
+      {
+        if (z != Z_RAISE_AFTER_HOMING)
+          resume_print = false;
+        return false;
+      }
+    }
+    return false;
+  }
+#endif //RESUME_FEATURE
+
+#ifdef TRACK_LAYER
+  void layer_count(const float &z)
+  {
+    if (z > last_z && !gone_up) // up once
+      gone_up = true;
+    else if (z < last_z) { // back down
+      if (z > last_layer_z)
+      {
+        #ifdef INCREASE_LAYER_ON_HOP
+          current_layer++;
+          #ifdef RESUME_FEATURE
+            if(!resume_print)
+            {
+              planner_disabled_below_z = z - 1.0/(axis_steps_per_unit[Z_AXIS]);
+              //SD_StoreZ();
+              #ifdef RESUME_EEPROM_FEATURE
+                Config_StoreZ();
+              #endif
+            }
+          #endif
+        #else
+          ;
+        #endif
+      }
+      else if (z < last_layer_z && z != 0)
+        current_layer = 1; // if it goes lower than what we would think was the previous layer then we might as well assume it's printing another object
+      else if (z == 0)
+        current_layer = 0;
+      last_layer_z = z;
+      gone_up = false;
+    }
+    else if (z > last_z && gone_up) // up twice
+    {
+      if(z - last_z < 0.05) // spiral vase protection
+        return;
+      current_layer++;
+      #ifdef RESUME_FEATURE
+        if(!check_if_sdprinting() && !resume_print)
+        {
+          planner_disabled_below_z = z - 1.0/(axis_steps_per_unit[Z_AXIS]);
+          //SD_StoreZ();
+          #ifdef RESUME_EEPROM_FEATURE
+            Config_StoreZ();
+          #endif
+        }
+        else if(!resume_z && check_if_sdprinting() && !resume_print && get_sdposition() > 10240 && get_sdposition() > sd_position)
+        {
+          sd_position = get_sdposition();
+          SD_StoreCardPos();
+          #ifdef RESUME_EEPROM_FEATURE
+            Config_StoreCardPos();
+          #endif
+        }
+        else if(!resume_z && resume_print && !sd_position_set && get_sdposition() > 10240) //TODO: use layers or percentage instead of 10KBs
+        {
+          set_resume_sdposition();
+          sd_position_set = true;
+        }
+      #endif
+    }
+
+    last_z = z;
+  }
+#endif //TRACK_LAYER
 
 float junction_deviation = 0.1;
 // Add a new linear movement to the buffer. steps_x, _y and _z is the absolute position in 
@@ -556,6 +699,26 @@ void plan_buffer_line(float x, float y, float z, const float &e, float feed_rate
 void plan_buffer_line(const float &x, const float &y, const float &z, const float &e, float feed_rate, const uint8_t &extruder)
 #endif  //ENABLE_AUTO_BED_LEVELING
 {
+  #ifdef TRACK_LAYER
+    layer_count(z);
+  #endif //TRACK_LAYER
+
+  #ifdef RESUME_FEATURE
+    if(floor_z(z))
+    {
+      if(!move_z_before_resume)
+        plan_set_z_position(z);
+      plan_set_e_position(e);
+      return;
+    }
+    if(print_resumed && move_z_before_resume)
+    {
+      x = before_resume_xy[X_AXIS];
+      y = before_resume_xy[Y_AXIS];
+      move_z_before_resume = false;
+    }
+  #endif
+
   // Calculate the buffer head after we push this byte
   int next_buffer_head = next_block_index(block_buffer_head);
 
@@ -579,11 +742,7 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
   target[X_AXIS] = lround(x*axis_steps_per_unit[X_AXIS]);
   target[Y_AXIS] = lround(y*axis_steps_per_unit[Y_AXIS]);
   target[Z_AXIS] = lround(z*axis_steps_per_unit[Z_AXIS]);     
-  if(active_extruder==0) {
-    target[E_AXIS] = lround(e*axis_steps_per_unit[E_AXIS]);
-  } else if(active_extruder==1) {
-    target[E_AXIS] = lround(e*e1_steps_per_unit);
-  }
+  target[E_AXIS] = lround(e*axis_steps_per_unit[E_AXIS]);
 
   #ifdef PREVENT_DANGEROUS_EXTRUDE
   if(target[E_AXIS]!=position[E_AXIS])
@@ -637,7 +796,6 @@ block->steps_y = labs((target[X_AXIS]-position[X_AXIS]) - (target[Y_AXIS]-positi
   }
 
   block->fan_speed = fanSpeed;
-  block->fan_speed1 = fanSpeed1;
   #ifdef BARICUDA
   block->valve_pressure = ValvePressure;
   block->e_to_p_pressure = EtoPPressure;
@@ -690,12 +848,47 @@ block->steps_y = labs((target[X_AXIS]-position[X_AXIS]) - (target[Y_AXIS]-positi
   if(block->steps_z != 0) enable_z();
 #endif
 
-  // Enable all
+  // Enable extruder(s)
   if(block->steps_e != 0)
   {
-    enable_e0();
-    enable_e1();
-    enable_e2(); 
+    if (DISABLE_INACTIVE_EXTRUDER) //enable only selected extruder
+    {
+
+      if(g_uc_extruder_last_move[0] > 0) g_uc_extruder_last_move[0]--;
+      if(g_uc_extruder_last_move[1] > 0) g_uc_extruder_last_move[1]--;
+      if(g_uc_extruder_last_move[2] > 0) g_uc_extruder_last_move[2]--;
+      
+      switch(extruder)
+      {
+        case 0: 
+          enable_e0(); 
+          g_uc_extruder_last_move[0] = BLOCK_BUFFER_SIZE*2;
+          
+          if(g_uc_extruder_last_move[1] == 0) disable_e1(); 
+          if(g_uc_extruder_last_move[2] == 0) disable_e2(); 
+        break;
+        case 1:
+          enable_e1(); 
+          g_uc_extruder_last_move[1] = BLOCK_BUFFER_SIZE*2;
+          
+          if(g_uc_extruder_last_move[0] == 0) disable_e0(); 
+          if(g_uc_extruder_last_move[2] == 0) disable_e2(); 
+        break;
+        case 2:
+          enable_e2(); 
+          g_uc_extruder_last_move[2] = BLOCK_BUFFER_SIZE*2;
+          
+          if(g_uc_extruder_last_move[0] == 0) disable_e0(); 
+          if(g_uc_extruder_last_move[1] == 0) disable_e1(); 
+        break;        
+      }
+    }
+    else //enable all
+    {
+      enable_e0();
+      enable_e1();
+      enable_e2(); 
+    }
   }
 
   if (block->steps_e == 0)
@@ -707,27 +900,37 @@ block->steps_y = labs((target[X_AXIS]-position[X_AXIS]) - (target[Y_AXIS]-positi
     if(feed_rate<minimumfeedrate) feed_rate=minimumfeedrate;
   } 
 
-  float delta_mm[4];
+/* This part of the code calculates the total length of the movement. 
+For cartesian bots, the X_AXIS is the real X movement and same for Y_AXIS.
+But for corexy bots, that is not true. The "X_AXIS" and "Y_AXIS" motors (that should be named to A_AXIS
+and B_AXIS) cannot be used for X and Y length, because A=X+Y and B=X-Y.
+So we need to create other 2 "AXIS", named X_HEAD and Y_HEAD, meaning the real displacement of the Head. 
+Having the real displacement of the head, we can calculate the total movement length and apply the desired speed.
+*/ 
   #ifndef COREXY
+    float delta_mm[4];
     delta_mm[X_AXIS] = (target[X_AXIS]-position[X_AXIS])/axis_steps_per_unit[X_AXIS];
     delta_mm[Y_AXIS] = (target[Y_AXIS]-position[Y_AXIS])/axis_steps_per_unit[Y_AXIS];
   #else
+    float delta_mm[6];
+    delta_mm[X_HEAD] = (target[X_AXIS]-position[X_AXIS])/axis_steps_per_unit[X_AXIS];
+    delta_mm[Y_HEAD] = (target[Y_AXIS]-position[Y_AXIS])/axis_steps_per_unit[Y_AXIS];
     delta_mm[X_AXIS] = ((target[X_AXIS]-position[X_AXIS]) + (target[Y_AXIS]-position[Y_AXIS]))/axis_steps_per_unit[X_AXIS];
     delta_mm[Y_AXIS] = ((target[X_AXIS]-position[X_AXIS]) - (target[Y_AXIS]-position[Y_AXIS]))/axis_steps_per_unit[Y_AXIS];
   #endif
   delta_mm[Z_AXIS] = (target[Z_AXIS]-position[Z_AXIS])/axis_steps_per_unit[Z_AXIS];
-  if(active_extruder==0) {
-    delta_mm[E_AXIS] = ((target[E_AXIS]-position[E_AXIS])/axis_steps_per_unit[E_AXIS])*volumetric_multiplier[active_extruder]*extrudemultiply/100.0;
-  } else if(active_extruder==1) {
-    delta_mm[E_AXIS] = ((target[E_AXIS]-position[E_AXIS])/e1_steps_per_unit)*volumetric_multiplier[active_extruder]*extrudemultiply/100.0;
-  }
+  delta_mm[E_AXIS] = ((target[E_AXIS]-position[E_AXIS])/axis_steps_per_unit[E_AXIS])*volumetric_multiplier[active_extruder]*extrudemultiply/100.0;
   if ( block->steps_x <=dropsegments && block->steps_y <=dropsegments && block->steps_z <=dropsegments )
   {
     block->millimeters = fabs(delta_mm[E_AXIS]);
   } 
   else
   {
-    block->millimeters = sqrt(square(delta_mm[X_AXIS]) + square(delta_mm[Y_AXIS]) + square(delta_mm[Z_AXIS]));
+    #ifndef COREXY
+      block->millimeters = sqrt(square(delta_mm[X_AXIS]) + square(delta_mm[Y_AXIS]) + square(delta_mm[Z_AXIS]));
+	#else
+	  block->millimeters = sqrt(square(delta_mm[X_HEAD]) + square(delta_mm[Y_HEAD]) + square(delta_mm[Z_AXIS]));
+    #endif	
   }
   float inverse_millimeters = 1.0/block->millimeters;  // Inverse millimeters to remove multiple divides 
 
@@ -761,6 +964,49 @@ block->steps_y = labs((target[X_AXIS]-position[X_AXIS]) - (target[Y_AXIS]-positi
 
   block->nominal_speed = block->millimeters * inverse_second; // (mm/sec) Always > 0
   block->nominal_rate = ceil(block->step_event_count * inverse_second); // (step/sec) Always > 0
+
+#ifdef FILAMENT_SENSOR
+  //FMM update ring buffer used for delay with filament measurements
+  
+  
+    if((extruder==FILAMENT_SENSOR_EXTRUDER_NUM) && (delay_index2 > -1))  //only for extruder with filament sensor and if ring buffer is initialized
+  	  {
+    delay_dist = delay_dist + delta_mm[E_AXIS];  //increment counter with next move in e axis
+  
+    while (delay_dist >= (10*(MAX_MEASUREMENT_DELAY+1)))  //check if counter is over max buffer size in mm
+      	  delay_dist = delay_dist - 10*(MAX_MEASUREMENT_DELAY+1);  //loop around the buffer
+    while (delay_dist<0)
+    	  delay_dist = delay_dist + 10*(MAX_MEASUREMENT_DELAY+1); //loop around the buffer
+      
+    delay_index1=delay_dist/10.0;  //calculate index
+    
+    //ensure the number is within range of the array after converting from floating point
+    if(delay_index1<0)
+    	delay_index1=0;
+    else if (delay_index1>MAX_MEASUREMENT_DELAY)
+    	delay_index1=MAX_MEASUREMENT_DELAY;
+    	
+    if(delay_index1 != delay_index2)  //moved index
+  	  {
+    	meas_sample=widthFil_to_size_ratio()-100;  //subtract off 100 to reduce magnitude - to store in a signed char
+  	  }
+    while( delay_index1 != delay_index2)
+  	  {
+  	  delay_index2 = delay_index2 + 1;
+  	if(delay_index2>MAX_MEASUREMENT_DELAY)
+  			  delay_index2=delay_index2-(MAX_MEASUREMENT_DELAY+1);  //loop around buffer when incrementing
+  	  if(delay_index2<0)
+  		delay_index2=0;
+  	  else if (delay_index2>MAX_MEASUREMENT_DELAY)
+  		delay_index2=MAX_MEASUREMENT_DELAY;  
+  	  
+  	  measurement_delay[delay_index2]=meas_sample;
+  	  }
+    	
+    
+  	  }
+#endif
+
 
   // Calculate and limit speed in mm/sec for each axis
   float current_speed[4];
@@ -942,7 +1188,7 @@ block->steps_y = labs((target[X_AXIS]-position[X_AXIS]) - (target[Y_AXIS]-positi
   else {
     long acc_dist = estimate_acceleration_distance(0, block->nominal_rate, block->acceleration_st);
     float advance = (STEPS_PER_CUBIC_MM_E * EXTRUDER_ADVANCE_K) * 
-      (current_speed[E_AXIS] * current_speed[E_AXIS] * EXTRUTION_AREA * EXTRUTION_AREA)*256;
+      (current_speed[E_AXIS] * current_speed[E_AXIS] * EXTRUSION_AREA * EXTRUSION_AREA)*256;
     block->advance = advance;
     if(acc_dist == 0) {
       block->advance_rate = 0;
@@ -1001,11 +1247,7 @@ void plan_set_position(const float &x, const float &y, const float &z, const flo
   position[X_AXIS] = lround(x*axis_steps_per_unit[X_AXIS]);
   position[Y_AXIS] = lround(y*axis_steps_per_unit[Y_AXIS]);
   position[Z_AXIS] = lround(z*axis_steps_per_unit[Z_AXIS]);     
-  if(active_extruder==0) {
-    position[E_AXIS] = lround(e*axis_steps_per_unit[E_AXIS]);  
-  } else if(active_extruder==1) {
-    position[E_AXIS] = lround(e*e1_steps_per_unit);  
-  }
+  position[E_AXIS] = lround(e*axis_steps_per_unit[E_AXIS]);  
   st_set_position(position[X_AXIS], position[Y_AXIS], position[Z_AXIS], position[E_AXIS]);
   previous_nominal_speed = 0.0; // Resets planner junction speeds. Assumes start from rest.
   previous_speed[0] = 0.0;
@@ -1014,13 +1256,15 @@ void plan_set_position(const float &x, const float &y, const float &z, const flo
   previous_speed[3] = 0.0;
 }
 
+void plan_set_z_position(const float &z)
+{
+  position[Z_AXIS] = lround(z*axis_steps_per_unit[Z_AXIS]);  
+  st_set_z_position(position[Z_AXIS]);
+}
+
 void plan_set_e_position(const float &e)
 {
-  if(active_extruder==0) {
-    position[E_AXIS] = lround(e*axis_steps_per_unit[E_AXIS]);  
-  } else if(active_extruder==1) {
-    position[E_AXIS] = lround(e*e1_steps_per_unit);  
-  }
+  position[E_AXIS] = lround(e*axis_steps_per_unit[E_AXIS]);  
   st_set_e_position(position[E_AXIS]);
 }
 
@@ -1044,4 +1288,3 @@ void reset_acceleration_rates()
         axis_steps_per_sqr_second[i] = max_acceleration_units_per_sq_second[i] * axis_steps_per_unit[i];
         }
 }
-

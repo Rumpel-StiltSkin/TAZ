@@ -1,5 +1,5 @@
 /*
-  This code contibuted by Triffid_Hunter and modified by Kliment
+  This code contributed by Triffid_Hunter and modified by Kliment
   why double up on these macros? see http://gcc.gnu.org/onlinedocs/cpp/Stringification.html
 */
 
@@ -4018,4 +4018,3 @@ pins
 #endif
 
 #endif /* _FASTIO_ARDUINO_H */
-

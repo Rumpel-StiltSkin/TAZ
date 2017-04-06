@@ -18,17 +18,19 @@ public:
   //this is to delay autostart and hence the initialisaiton of the sd card to some seconds after the normal init, so the device is available quick after a reset
 
   void checkautostart(bool x); 
-  void openFile(char* name,bool read,bool replace_current=true);
+  void openFile(char* name,bool read,bool replace_current=true,bool silence=false);
   void openLogFile(char* name);
-  void removeFile(char* name);
+  void removeFile(char* name,bool silence = false);
   void closefile(bool store_location=false);
   void release();
   void startFileprint();
   void pauseSDPrint();
+  uint32_t getSDpos();
+//uint32_t getFilesize();
   void getStatus();
   void printingHasFinished();
 
-  void getfilename(const uint8_t nr);
+  void getfilename(uint16_t nr, const char* const match=NULL);
   uint16_t getnrfilenames();
   
   void getAbsFilename(char *t);
@@ -44,7 +46,7 @@ public:
   FORCE_INLINE bool eof() { return sdpos>=filesize ;};
   FORCE_INLINE int16_t get() {  sdpos = file.curPosition();return (int16_t)file.read();};
   FORCE_INLINE void setIndex(long index) {sdpos = index;file.seekSet(index);};
-  FORCE_INLINE uint8_t percentDone(){if(!isFileOpen()) return 0; if(filesize) return sdpos/((filesize+99)/100); else return 0;};
+  FORCE_INLINE float percentDone(){if(!isFileOpen()) return 0; if(filesize) return float(sdpos)/((float(filesize)+99.0)/100.0); else return 0;};
   FORCE_INLINE char* getWorkDirName(){workDir.getFilename(filename);return filename;};
 
 public:
@@ -77,7 +79,7 @@ private:
   LsAction lsAction; //stored for recursion.
   int16_t nrFiles; //counter for the files in the current directory and recycled as position counter for getting the nrFiles'th name in the directory.
   char* diveDirName;
-  void lsDive(const char *prepend,SdFile parent);
+  void lsDive(const char *prepend, SdFile parent, const char * const match=NULL);
 };
 extern CardReader card;
 #define IS_SD_PRINTING (card.sdprinting)
@@ -99,4 +101,3 @@ extern CardReader card;
 
 #endif //SDSUPPORT
 #endif
-

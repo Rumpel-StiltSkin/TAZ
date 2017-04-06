@@ -28,13 +28,28 @@
 #endif
 
 // public functions
-void tp_init();  //initialise the heating
+void tp_init();  //initialize the heating
 void manage_heater(); //it is critical that this is called periodically.
+
+#ifdef FILAMENT_SENSOR
+// For converting raw Filament Width to milimeters 
+ float analog2widthFil(); 
+ 
+// For converting raw Filament Width to an extrusion ratio 
+ int widthFil_to_size_ratio();
+#endif
 
 // low level conversion routines
 // do not use these routines and variables outside of temperature.cpp
 extern int target_temperature[EXTRUDERS];  
 extern float current_temperature[EXTRUDERS];
+#if defined (THERMAL_RUNAWAY_PROTECTION_PERIOD) && THERMAL_RUNAWAY_PROTECTION_PERIOD > 0
+  #ifdef TEMP_SENSOR_BED
+    extern bool target_temp_reached[EXTRUDERS+1];
+  #else
+    extern bool target_temp_reached[EXTRUDERS];
+  #endif
+#endif
 #ifdef SHOW_TEMP_ADC_VALUES
   extern int current_temperature_raw[EXTRUDERS];
   extern int current_temperature_bed_raw;
@@ -64,6 +79,7 @@ extern float current_temperature_bed;
   
 #ifdef BABYSTEPPING
   extern volatile int babystepsTodo[3];
+  extern volatile bool offset_up;
 #endif
   
 //high level conversion routines, for use outside of temperature.cpp
@@ -154,6 +170,17 @@ void disable_heater();
 void setWatch();
 void updatePID();
 
+#if defined (THERMAL_RUNAWAY_PROTECTION_PERIOD) && THERMAL_RUNAWAY_PROTECTION_PERIOD > 0
+void thermal_runaway_protection(int *state, unsigned long *timer, float temperature, float target_temperature, int heater_id, int period_seconds, int hysteresis_degc);
+static int thermal_runaway_state_machine[3]; // = {0,0,0};
+static unsigned long thermal_runaway_timer[3]; // = {0,0,0};
+static bool thermal_runaway = false;
+  #if TEMP_SENSOR_BED != 0
+    static int thermal_runaway_bed_state_machine;
+    static unsigned long thermal_runaway_bed_timer;
+  #endif
+#endif
+
 FORCE_INLINE void autotempShutdown(){
  #ifdef AUTOTEMP
  if(autotemp_enabled)
@@ -167,6 +194,8 @@ FORCE_INLINE void autotempShutdown(){
 
 void PID_autotune(float temp, int extruder, int ncycles);
 
-#endif
+void setExtruderAutoFanState(int pin, bool state);
+void checkExtruderAutoFans();
 
+#endif
 

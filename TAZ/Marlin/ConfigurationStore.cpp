@@ -8,6 +8,10 @@ void _EEPROM_writeData(int &pos, uint8_t* value, uint8_t size)
 {
     do
     {
+        //SERIAL_PROTOCOL(int(*value));
+        //SERIAL_ECHOLN("Position: ");
+        //SERIAL_PROTOCOL(pos);
+        //SERIAL_ECHOLN("");
         eeprom_write_byte((unsigned char*)pos, *value);
         pos++;
         value++;
@@ -23,9 +27,49 @@ void _EEPROM_readData(int &pos, uint8_t* value, uint8_t size)
         value++;
     }while(--size);
 }
+
+#ifdef ENABLE_AUTO_BED_LEVELING
+int i_bed_level;
+
+void Config_StoreLevel()
+{
+    int i_bed = i_bed_level;
+    //SERIAL_ECHOLN(i_bed_level);
+    EEPROM_WRITE_VAR(i_bed, plane_equation_coefficients);
+}
+#endif
+
+#ifdef RESUME_EEPROM_FEATURE
+int i_z;
+
+void Config_StoreZ()
+{
+    int i_resume = i_z;
+    //SERIAL_ECHOLN(i_z);
+    EEPROM_WRITE_VAR(i_resume, planner_disabled_below_z);
+}
+
+int i_sd;
+
+void Config_StoreCardPos()
+{
+    int i_sdpos = i_sd;
+    //SERIAL_ECHOLN(i_sd);
+    EEPROM_WRITE_VAR(i_sdpos, sd_position);
+}
+#endif
+
+int i_zoffset;
+
+void Config_StoreZOffset()
+{
+    int i_zprobe = i_zoffset;
+    //SERIAL_ECHOLN(i_zoffset);
+    EEPROM_WRITE_VAR(i_zprobe, zprobe_zoffset);
+}
+
 #define EEPROM_READ_VAR(pos, value) _EEPROM_readData(pos, (uint8_t*)&value, sizeof(value))
 //======================================================================================
-
 
 
 
@@ -37,7 +81,8 @@ void _EEPROM_readData(int &pos, uint8_t* value, uint8_t size)
 // the default values are used whenever there is a change to the data, to prevent
 // wrong data being written to the variables.
 // ALSO:  always make sure the variables in the Store and retrieve sections are in the same order.
-#define EEPROM_VERSION "V19"
+
+#define EEPROM_VERSION "V17"
 
 #ifdef EEPROM_SETTINGS
 void Config_StoreSettings() 
@@ -45,9 +90,7 @@ void Config_StoreSettings()
   char ver[4]= "000";
   int i=EEPROM_OFFSET;
   EEPROM_WRITE_VAR(i,ver); // invalidate data first 
-  EEPROM_WRITE_VAR(i,axis_steps_per_unit); 
-  EEPROM_WRITE_VAR(i,e1_steps_per_unit);
-  //EEPROM_WRITE_VAR(i,extruder_offset);
+  EEPROM_WRITE_VAR(i,axis_steps_per_unit);
   EEPROM_WRITE_VAR(i,max_feedrate);  
   EEPROM_WRITE_VAR(i,max_acceleration_units_per_sq_second);
   EEPROM_WRITE_VAR(i,acceleration);
@@ -58,61 +101,24 @@ void Config_StoreSettings()
   EEPROM_WRITE_VAR(i,max_xy_jerk);
   EEPROM_WRITE_VAR(i,max_z_jerk);
   EEPROM_WRITE_VAR(i,max_e_jerk);
-  EEPROM_WRITE_VAR(i,add_homeing);
+  EEPROM_WRITE_VAR(i,add_homing);
   #ifdef DELTA
   EEPROM_WRITE_VAR(i,endstop_adj);
+  EEPROM_WRITE_VAR(i,delta_radius);
+  EEPROM_WRITE_VAR(i,delta_diagonal_rod);
+  EEPROM_WRITE_VAR(i,delta_segments_per_second);
   #endif
   #ifndef ULTIPANEL
   int plaPreheatHotendTemp = PLA_PREHEAT_HOTEND_TEMP, plaPreheatHPBTemp = PLA_PREHEAT_HPB_TEMP, plaPreheatFanSpeed = PLA_PREHEAT_FAN_SPEED;
-  int hipsPreheatHotendTemp = HIPS_PREHEAT_HOTEND_TEMP, hipsPreheatHPBTemp = HIPS_PREHEAT_HPB_TEMP, hipsPreheatFanSpeed = HIPS_PREHEAT_FAN_SPEED;
   int absPreheatHotendTemp = ABS_PREHEAT_HOTEND_TEMP, absPreheatHPBTemp = ABS_PREHEAT_HPB_TEMP, absPreheatFanSpeed = ABS_PREHEAT_FAN_SPEED;
-  int bridgePreheatHotendTemp = BRIDGE_PREHEAT_HOTEND_TEMP, bridgePreheatHPBTemp = BRIDGE_PREHEAT_HPB_TEMP, bridgePreheatFanSpeed = BRIDGE_PREHEAT_FAN_SPEED;
-  int pctpePreheatHotendTemp = PCTPE_PREHEAT_HOTEND_TEMP, pctpePreheatHPBTemp = PCTPE_PREHEAT_HPB_TEMP, pctpePreheatFanSpeed = PCTPE_PREHEAT_FAN_SPEED;
-  int alloy_910PreheatHotendTemp = ALLOY_910_PREHEAT_HOTEND_TEMP, alloy_910PreheatHPBTemp = ALLOY_910_PREHEAT_HPB_TEMP, alloy_910PreheatFanSpeed = ALLOY_910_PREHEAT_FAN_SPEED;
-  //~ int bambooPreheatHotendTemp = BAMBOO_PREHEAT_HOTEND_TEMP, bambooPreheatHPBTemp = BAMBO_PREHEAT_HPB_TEMP, bambooPreheatFanSpeed = BAMBOO_PREHEAT_FAN_SPEED;
-  int n_ventPreheatHotendTemp = N_VENT_PREHEAT_HOTEND_TEMP, n_ventPreheatHPBTemp = N_VENT_PREHEAT_HPB_TEMP, n_ventPreheatFanSpeed = N_VENT_PREHEAT_FAN_SPEED;
-  int laybrickPreheatHotendTemp = LAYBRICK_PREHEAT_HOTEND_TEMP, laybrickPreheatHPBTemp = LAYBRICK_PREHEAT_HPB_TEMP, laybrickPreheatFanSpeed = LAYBRICK_PREHEAT_FAN_SPEED;
-  int laywoodPreheatHotendTemp = LAYWOOD_PREHEAT_HOTEND_TEMP, laywoodPreheatHPBTemp = LAYWOOD_PREHEAT_HPB_TEMP, laywoodPreheatFanSpeed = LAYWOOD_PREHEAT_FAN_SPEED;
-  int polycarbonatePreheatHotendTemp = POLYCARBONATE_PREHEAT_HOTEND_TEMP, polycarbonatePreheatHPBTemp = POLYCARBONATE_PREHEAT_HPB_TEMP, polycarbonatePreheatFanSpeed = POLYCARBONATE_PREHEAT_FAN_SPEED;
-  int tglasePreheatHotendTemp = TGLASE_PREHEAT_HOTEND_TEMP, tglasePreheatHPBTemp = TGLASE_PREHEAT_HPB_TEMP, tglasePreheatFanSpeed = TGLASE_PREHEAT_FAN_SPEED;
-  
   #endif
   EEPROM_WRITE_VAR(i,plaPreheatHotendTemp);
   EEPROM_WRITE_VAR(i,plaPreheatHPBTemp);
   EEPROM_WRITE_VAR(i,plaPreheatFanSpeed);
-  EEPROM_WRITE_VAR(i,hipsPreheatHotendTemp);
-  EEPROM_WRITE_VAR(i,hipsPreheatHPBTemp);
-  EEPROM_WRITE_VAR(i,hipsPreheatFanSpeed);
   EEPROM_WRITE_VAR(i,absPreheatHotendTemp);
   EEPROM_WRITE_VAR(i,absPreheatHPBTemp);
   EEPROM_WRITE_VAR(i,absPreheatFanSpeed);
-  EEPROM_WRITE_VAR(i,bridgePreheatHotendTemp);
-  EEPROM_WRITE_VAR(i,bridgePreheatHPBTemp);
-  EEPROM_WRITE_VAR(i,bridgePreheatFanSpeed);
-  EEPROM_WRITE_VAR(i,pctpePreheatHotendTemp);
-  EEPROM_WRITE_VAR(i,pctpePreheatHPBTemp);
-  EEPROM_WRITE_VAR(i,pctpePreheatFanSpeed);
-  EEPROM_WRITE_VAR(i,alloy_910PreheatHotendTemp);
-  EEPROM_WRITE_VAR(i,alloy_910PreheatHPBTemp);
-  EEPROM_WRITE_VAR(i,alloy_910PreheatFanSpeed);
-  //~ EEPROM_WRITE_VAR(i,bambooPreheatHotendTemp);
-  //~ EEPROM_WRITE_VAR(i,bambooPreheatHPBTemp);
-  //~ EEPROM_WRITE_VAR(i,bambooPreheatFanSpeed);
-  EEPROM_WRITE_VAR(i,n_ventPreheatHotendTemp);
-  EEPROM_WRITE_VAR(i,n_ventPreheatHPBTemp);
-  EEPROM_WRITE_VAR(i,n_ventPreheatFanSpeed);
-  EEPROM_WRITE_VAR(i,laybrickPreheatHotendTemp);
-  EEPROM_WRITE_VAR(i,laybrickPreheatHPBTemp);
-  EEPROM_WRITE_VAR(i,laybrickPreheatFanSpeed);
-  EEPROM_WRITE_VAR(i,laywoodPreheatHotendTemp);
-  EEPROM_WRITE_VAR(i,laywoodPreheatHPBTemp);
-  EEPROM_WRITE_VAR(i,laywoodPreheatFanSpeed);
-  EEPROM_WRITE_VAR(i,polycarbonatePreheatHotendTemp);
-  EEPROM_WRITE_VAR(i,polycarbonatePreheatHPBTemp);
-  EEPROM_WRITE_VAR(i,polycarbonatePreheatFanSpeed);
-  EEPROM_WRITE_VAR(i,tglasePreheatHotendTemp);
-  EEPROM_WRITE_VAR(i,tglasePreheatHPBTemp);
-  EEPROM_WRITE_VAR(i,tglasePreheatFanSpeed);
+  i_zoffset = i;
   EEPROM_WRITE_VAR(i,zprobe_zoffset);
   #ifdef PIDTEMP
     EEPROM_WRITE_VAR(i,Kp);
@@ -129,6 +135,68 @@ void Config_StoreSettings()
     int lcd_contrast = 32;
   #endif
   EEPROM_WRITE_VAR(i,lcd_contrast);
+  #ifdef SCARA
+  EEPROM_WRITE_VAR(i,axis_scaling);        // Add scaling for SCARA
+  #endif
+  #ifdef FWRETRACT
+  EEPROM_WRITE_VAR(i,autoretract_enabled);
+  EEPROM_WRITE_VAR(i,retract_length);
+  #if EXTRUDERS > 1
+  EEPROM_WRITE_VAR(i,retract_length_swap);
+  #endif
+  EEPROM_WRITE_VAR(i,retract_feedrate);
+  EEPROM_WRITE_VAR(i,retract_zlift);
+  EEPROM_WRITE_VAR(i,retract_recover_length);
+  #if EXTRUDERS > 1
+  EEPROM_WRITE_VAR(i,retract_recover_length_swap);
+  #endif
+  EEPROM_WRITE_VAR(i,retract_recover_feedrate);
+  #endif
+
+  // Save filament sizes
+  EEPROM_WRITE_VAR(i, volumetric_enabled);
+  EEPROM_WRITE_VAR(i, filament_size[0]);
+  #if EXTRUDERS > 1
+  EEPROM_WRITE_VAR(i, filament_size[1]);
+  #if EXTRUDERS > 2
+  EEPROM_WRITE_VAR(i, filament_size[2]);
+  #endif
+  #endif
+  #ifdef ENABLE_AUTO_BED_LEVELING
+  i_bed_level = i;
+  /*
+  SERIAL_ECHO_START;
+  SERIAL_ECHOLNPGM("i: ");
+  SERIAL_ECHO(i);
+  SERIAL_ECHOLNPGM("i_bed_level: ");
+  SERIAL_ECHO(i_bed_level);
+  SERIAL_ECHOLN("");
+  */
+  EEPROM_WRITE_VAR(i,plane_equation_coefficients);
+  #endif
+  #ifdef RESUME_EEPROM_FEATURE
+  i_z = i;
+  /*
+  SERIAL_ECHO_START;
+  SERIAL_ECHOLNPGM("i: ");
+  SERIAL_ECHO(i);
+  SERIAL_ECHOLNPGM("i_z: ");
+  SERIAL_ECHO(i_z);
+  SERIAL_ECHOLN("");
+  */
+  EEPROM_WRITE_VAR(i,planner_disabled_below_z);
+  i_sd = i;
+  /*
+  SERIAL_ECHO_START;
+  SERIAL_ECHOLNPGM("i: ");
+  SERIAL_ECHO(i);
+  SERIAL_ECHOLNPGM("i_sd: ");
+  SERIAL_ECHO(i_sd);
+  SERIAL_ECHOLN("");
+  */
+  EEPROM_WRITE_VAR(i,sd_position);
+  #endif
+  
   char ver2[4]=EEPROM_VERSION;
   i=EEPROM_OFFSET;
   EEPROM_WRITE_VAR(i,ver2); // validate data
@@ -144,29 +212,38 @@ void Config_PrintSettings()
     SERIAL_ECHO_START;
     SERIAL_ECHOLNPGM("Steps per unit:");
     SERIAL_ECHO_START;
-    SERIAL_ECHOPAIR("  M92 X",axis_steps_per_unit[0]);
-    SERIAL_ECHOPAIR(" Y",axis_steps_per_unit[1]);
-    SERIAL_ECHOPAIR(" Z",axis_steps_per_unit[2]);
-    SERIAL_ECHOPAIR(" E",axis_steps_per_unit[3]);
-    SERIAL_ECHOPAIR(" E1",e1_steps_per_unit);
+    SERIAL_ECHOPAIR("  M92 X",axis_steps_per_unit[X_AXIS]);
+    SERIAL_ECHOPAIR(" Y",axis_steps_per_unit[Y_AXIS]);
+    SERIAL_ECHOPAIR(" Z",axis_steps_per_unit[Z_AXIS]);
+    SERIAL_ECHOPAIR(" E",axis_steps_per_unit[E_AXIS]);
     SERIAL_ECHOLN("");
       
     SERIAL_ECHO_START;
+#ifdef SCARA
+SERIAL_ECHOLNPGM("Scaling factors:");
+    SERIAL_ECHO_START;
+    SERIAL_ECHOPAIR("  M365 X",axis_scaling[X_AXIS]);
+    SERIAL_ECHOPAIR(" Y",axis_scaling[Y_AXIS]);
+    SERIAL_ECHOPAIR(" Z",axis_scaling[Z_AXIS]);
+    SERIAL_ECHOLN("");
+      
+    SERIAL_ECHO_START;
+#endif
     SERIAL_ECHOLNPGM("Maximum feedrates (mm/s):");
     SERIAL_ECHO_START;
-    SERIAL_ECHOPAIR("  M203 X",max_feedrate[0]);
-    SERIAL_ECHOPAIR(" Y",max_feedrate[1] ); 
-    SERIAL_ECHOPAIR(" Z", max_feedrate[2] ); 
-    SERIAL_ECHOPAIR(" E", max_feedrate[3]);
+    SERIAL_ECHOPAIR("  M203 X", max_feedrate[X_AXIS]);
+    SERIAL_ECHOPAIR(" Y", max_feedrate[Y_AXIS]); 
+    SERIAL_ECHOPAIR(" Z", max_feedrate[Z_AXIS]); 
+    SERIAL_ECHOPAIR(" E", max_feedrate[E_AXIS]);
     SERIAL_ECHOLN("");
 
     SERIAL_ECHO_START;
     SERIAL_ECHOLNPGM("Maximum Acceleration (mm/s2):");
     SERIAL_ECHO_START;
-    SERIAL_ECHOPAIR("  M201 X" ,max_acceleration_units_per_sq_second[0] ); 
-    SERIAL_ECHOPAIR(" Y" , max_acceleration_units_per_sq_second[1] ); 
-    SERIAL_ECHOPAIR(" Z" ,max_acceleration_units_per_sq_second[2] );
-    SERIAL_ECHOPAIR(" E" ,max_acceleration_units_per_sq_second[3]);
+    SERIAL_ECHOPAIR("  M201 X" ,max_acceleration_units_per_sq_second[X_AXIS] ); 
+    SERIAL_ECHOPAIR(" Y" , max_acceleration_units_per_sq_second[Y_AXIS] ); 
+    SERIAL_ECHOPAIR(" Z" ,max_acceleration_units_per_sq_second[Z_AXIS] );
+    SERIAL_ECHOPAIR(" E" ,max_acceleration_units_per_sq_second[E_AXIS]);
     SERIAL_ECHOLN("");
     SERIAL_ECHO_START;
     SERIAL_ECHOLNPGM("Acceleration: S=acceleration, T=retract acceleration");
@@ -189,18 +266,25 @@ void Config_PrintSettings()
     SERIAL_ECHO_START;
     SERIAL_ECHOLNPGM("Home offset (mm):");
     SERIAL_ECHO_START;
-    SERIAL_ECHOPAIR("  M206 X",add_homeing[0] );
-    SERIAL_ECHOPAIR(" Y" ,add_homeing[1] );
-    SERIAL_ECHOPAIR(" Z" ,add_homeing[2] );
+    SERIAL_ECHOPAIR("  M206 X",add_homing[X_AXIS] );
+    SERIAL_ECHOPAIR(" Y" ,add_homing[Y_AXIS] );
+    SERIAL_ECHOPAIR(" Z" ,add_homing[Z_AXIS] );
     SERIAL_ECHOLN("");
 #ifdef DELTA
     SERIAL_ECHO_START;
     SERIAL_ECHOLNPGM("Endstop adjustement (mm):");
     SERIAL_ECHO_START;
-    SERIAL_ECHOPAIR("  M666 X",endstop_adj[0] );
-    SERIAL_ECHOPAIR(" Y" ,endstop_adj[1] );
-    SERIAL_ECHOPAIR(" Z" ,endstop_adj[2] );
-    SERIAL_ECHOLN("");
+    SERIAL_ECHOPAIR("  M666 X",endstop_adj[X_AXIS] );
+    SERIAL_ECHOPAIR(" Y" ,endstop_adj[Y_AXIS] );
+    SERIAL_ECHOPAIR(" Z" ,endstop_adj[Z_AXIS] );
+	SERIAL_ECHOLN("");
+	SERIAL_ECHO_START;
+	SERIAL_ECHOLNPGM("Delta settings: L=delta_diagonal_rod, R=delta_radius, S=delta_segments_per_second");
+	SERIAL_ECHO_START;
+	SERIAL_ECHOPAIR("  M665 L",delta_diagonal_rod );
+	SERIAL_ECHOPAIR(" R" ,delta_radius );
+	SERIAL_ECHOPAIR(" S" ,delta_segments_per_second );
+	SERIAL_ECHOLN("");
 #endif
 #ifdef PIDTEMP
     SERIAL_ECHO_START;
@@ -211,7 +295,84 @@ void Config_PrintSettings()
     SERIAL_ECHOPAIR(" D" ,unscalePID_d(Kd));
     SERIAL_ECHOLN(""); 
 #endif
-} 
+#ifdef FWRETRACT
+    SERIAL_ECHO_START;
+    SERIAL_ECHOLNPGM("Retract: S=Length (mm) F:Speed (mm/m) Z: ZLift (mm)");
+    SERIAL_ECHO_START;
+    SERIAL_ECHOPAIR("   M207 S",retract_length); 
+    SERIAL_ECHOPAIR(" F" ,retract_feedrate*60); 
+    SERIAL_ECHOPAIR(" Z" ,retract_zlift);
+    SERIAL_ECHOLN(""); 
+    SERIAL_ECHO_START;
+    SERIAL_ECHOLNPGM("Recover: S=Extra length (mm) F:Speed (mm/m)");
+    SERIAL_ECHO_START;
+    SERIAL_ECHOPAIR("   M208 S",retract_recover_length);
+    SERIAL_ECHOPAIR(" F", retract_recover_feedrate*60);
+	SERIAL_ECHOLN("");
+    SERIAL_ECHO_START;
+    SERIAL_ECHOLNPGM("Auto-Retract: S=0 to disable, 1 to interpret extrude-only moves as retracts or recoveries");
+    SERIAL_ECHO_START;
+    SERIAL_ECHOPAIR("   M209 S", (unsigned long)(autoretract_enabled ? 1 : 0));
+    SERIAL_ECHOLN("");
+#if EXTRUDERS > 1
+    SERIAL_ECHO_START;
+    SERIAL_ECHOLNPGM("Multi-extruder settings:");
+    SERIAL_ECHO_START;
+    SERIAL_ECHOPAIR("   Swap retract length (mm):    ", retract_length_swap);
+    SERIAL_ECHOLN("");
+    SERIAL_ECHO_START;
+    SERIAL_ECHOPAIR("   Swap rec. addl. length (mm): ", retract_recover_length_swap);
+    SERIAL_ECHOLN("");
+#endif
+    SERIAL_ECHO_START;
+    if (volumetric_enabled) {
+        SERIAL_ECHOLNPGM("Filament settings:");
+        SERIAL_ECHO_START;
+        SERIAL_ECHOPAIR("   M200 D", filament_size[0]);
+        SERIAL_ECHOLN(""); 
+#if EXTRUDERS > 1
+		SERIAL_ECHO_START;
+        SERIAL_ECHOPAIR("   M200 T1 D", filament_size[1]);
+        SERIAL_ECHOLN(""); 
+#if EXTRUDERS > 2
+		SERIAL_ECHO_START;
+        SERIAL_ECHOPAIR("   M200 T2 D", filament_size[2]);
+		SERIAL_ECHOLN("");
+#endif
+#endif
+    } else {
+        SERIAL_ECHOLNPGM("Filament settings: Disabled");
+    }
+#endif
+#ifdef ENABLE_AUTO_BED_LEVELING
+    SERIAL_ECHO_START;
+    SERIAL_ECHOLNPGM("Eqn coefficients:");
+    SERIAL_ECHO_START;
+    SERIAL_PROTOCOLPGM("a: ");
+    SERIAL_PROTOCOL_F(plane_equation_coefficients[0], 6);
+    SERIAL_PROTOCOLPGM(" b: ");
+    SERIAL_PROTOCOL_F(plane_equation_coefficients[1], 6);
+    SERIAL_PROTOCOLPGM(" d: ");
+    SERIAL_PROTOCOL_F(plane_equation_coefficients[2], 6);
+    SERIAL_ECHOLN("");
+#endif
+#ifdef RESUME_EEPROM_FEATURE
+    SERIAL_ECHO_START;
+    SERIAL_PROTOCOLPGM("Resume from Z:");
+    SERIAL_ECHO_START;
+    SERIAL_PROTOCOLPGM("Z = ");
+    SERIAL_PROTOCOL_F(planner_disabled_below_z, 6);
+    SERIAL_ECHOLN("");
+
+    SERIAL_ECHO_START;
+    SERIAL_PROTOCOLPGM("SD Position:");
+    SERIAL_ECHO_START;
+    SERIAL_PROTOCOLPGM("sdpos = ");
+    SERIAL_PROTOCOL(sd_position);
+    SERIAL_ECHOLN("");
+#endif
+
+}
 #endif
 
 
@@ -227,8 +388,6 @@ void Config_RetrieveSettings()
     {
         // version number match
         EEPROM_READ_VAR(i,axis_steps_per_unit);
-        EEPROM_READ_VAR(i,e1_steps_per_unit);
-        //EEPROM_READ_VAR(i,extruder_offset);
         EEPROM_READ_VAR(i,max_feedrate);  
         EEPROM_READ_VAR(i,max_acceleration_units_per_sq_second);
         
@@ -243,60 +402,24 @@ void Config_RetrieveSettings()
         EEPROM_READ_VAR(i,max_xy_jerk);
         EEPROM_READ_VAR(i,max_z_jerk);
         EEPROM_READ_VAR(i,max_e_jerk);
-        EEPROM_READ_VAR(i,add_homeing);
+        EEPROM_READ_VAR(i,add_homing);
         #ifdef DELTA
-        EEPROM_READ_VAR(i,endstop_adj);
+		EEPROM_READ_VAR(i,endstop_adj);
+		EEPROM_READ_VAR(i,delta_radius);
+		EEPROM_READ_VAR(i,delta_diagonal_rod);
+		EEPROM_READ_VAR(i,delta_segments_per_second);
         #endif
         #ifndef ULTIPANEL
         int plaPreheatHotendTemp, plaPreheatHPBTemp, plaPreheatFanSpeed;
-        int hipsPreheatHotendTemp, hipsPreheatHPBTemp, hipsPreheatFanSpeed;
         int absPreheatHotendTemp, absPreheatHPBTemp, absPreheatFanSpeed;
-        int bridgePreheatHotendTemp, bridgePreheatHPBTemp, bridgePreheatFanSpeed;
-        int pctpePreheatHotendTemp, pctpePreheatHPBTemp, pctpePreheatFanSpeed;
-        int alloy_910PreheatHotendTemp, alloy_910PreheatHPBTemp, alloy_910PreheatFanSpeed;
-        //~ int bambooPreheatHotendTemp, bambooPreheatHPBTemp, bambooPreheatFanSpeed;
-        int n_ventPreheatHotendTemp, n_ventPreheatHPBTemp, n_ventPreheatFanSpeed;
-        int laybrickPreheatHotendTemp, laybrickPreheatHPBTemp, laybrickPreheatFanSpeed;
-        int laywoodPreheatHotendTemp, laywoodPreheatHPBTemp, laywoodPreheatFanSpeed;
-        int polycarbonatePreheatHotendTemp, polycarbonatePreheatHPBTemp, polycarbonatePreheatFanSpeed;
-        int tglasePreheatHotendTemp, tglasePreheatHPBTemp, tglasePreheatFanSpeed;
         #endif
         EEPROM_READ_VAR(i,plaPreheatHotendTemp);
         EEPROM_READ_VAR(i,plaPreheatHPBTemp);
         EEPROM_READ_VAR(i,plaPreheatFanSpeed);
-        EEPROM_READ_VAR(i,hipsPreheatHotendTemp);
-        EEPROM_READ_VAR(i,hipsPreheatHPBTemp);
-        EEPROM_READ_VAR(i,hipsPreheatFanSpeed);
         EEPROM_READ_VAR(i,absPreheatHotendTemp);
         EEPROM_READ_VAR(i,absPreheatHPBTemp);
         EEPROM_READ_VAR(i,absPreheatFanSpeed);
-        EEPROM_READ_VAR(i,bridgePreheatHotendTemp);
-        EEPROM_READ_VAR(i,bridgePreheatHPBTemp);
-        EEPROM_READ_VAR(i,bridgePreheatFanSpeed);
-        EEPROM_READ_VAR(i,pctpePreheatHotendTemp);
-        EEPROM_READ_VAR(i,pctpePreheatHPBTemp);
-        EEPROM_READ_VAR(i,pctpePreheatFanSpeed);
-        EEPROM_READ_VAR(i,alloy_910PreheatHotendTemp);
-        EEPROM_READ_VAR(i,alloy_910PreheatHPBTemp);
-        EEPROM_READ_VAR(i,alloy_910PreheatFanSpeed);
-        //~ EEPROM_READ_VAR(i,bambooPreheatHotendTemp);
-        //~ EEPROM_READ_VAR(i,bambooPreheatHPBTemp);
-        //~ EEPROM_READ_VAR(i,bambooPreheatFanSpeed);
-        EEPROM_READ_VAR(i,n_ventPreheatHotendTemp);
-        EEPROM_READ_VAR(i,n_ventPreheatHPBTemp);
-        EEPROM_READ_VAR(i,n_ventPreheatFanSpeed);
-        EEPROM_READ_VAR(i,laybrickPreheatHotendTemp);
-        EEPROM_READ_VAR(i,laybrickPreheatHPBTemp);
-        EEPROM_READ_VAR(i,laybrickPreheatFanSpeed);
-        EEPROM_READ_VAR(i,laywoodPreheatHotendTemp);
-        EEPROM_READ_VAR(i,laywoodPreheatHPBTemp);
-        EEPROM_READ_VAR(i,laywoodPreheatFanSpeed);
-        EEPROM_READ_VAR(i,polycarbonatePreheatHotendTemp);
-        EEPROM_READ_VAR(i,polycarbonatePreheatHPBTemp);
-        EEPROM_READ_VAR(i,polycarbonatePreheatFanSpeed);
-        EEPROM_READ_VAR(i,tglasePreheatHotendTemp);
-        EEPROM_READ_VAR(i,tglasePreheatHPBTemp);
-        EEPROM_READ_VAR(i,tglasePreheatFanSpeed);
+        i_zoffset = i;
         EEPROM_READ_VAR(i,zprobe_zoffset);
         #ifndef PIDTEMP
         float Kp,Ki,Kd;
@@ -309,7 +432,72 @@ void Config_RetrieveSettings()
         int lcd_contrast;
         #endif
         EEPROM_READ_VAR(i,lcd_contrast);
+		#ifdef SCARA
+		EEPROM_READ_VAR(i,axis_scaling);
+		#endif
 
+		#ifdef FWRETRACT
+		EEPROM_READ_VAR(i,autoretract_enabled);
+		EEPROM_READ_VAR(i,retract_length);
+		#if EXTRUDERS > 1
+		EEPROM_READ_VAR(i,retract_length_swap);
+		#endif
+		EEPROM_READ_VAR(i,retract_feedrate);
+		EEPROM_READ_VAR(i,retract_zlift);
+		EEPROM_READ_VAR(i,retract_recover_length);
+		#if EXTRUDERS > 1
+		EEPROM_READ_VAR(i,retract_recover_length_swap);
+		#endif
+		EEPROM_READ_VAR(i,retract_recover_feedrate);
+		#endif
+
+		EEPROM_READ_VAR(i, volumetric_enabled);
+		EEPROM_READ_VAR(i, filament_size[0]);
+#if EXTRUDERS > 1
+		EEPROM_READ_VAR(i, filament_size[1]);
+#if EXTRUDERS > 2
+		EEPROM_READ_VAR(i, filament_size[2]);
+#endif
+#endif
+
+                #ifdef ENABLE_AUTO_BED_LEVELING
+                i_bed_level = i;
+                /*
+                SERIAL_ECHO_START;
+                SERIAL_ECHOLNPGM("i: ");
+                SERIAL_ECHO(i);
+                SERIAL_ECHOLNPGM("i_bed_level: ");
+                SERIAL_ECHO(i_bed_level);
+                SERIAL_ECHOLN("");
+                */
+                EEPROM_READ_VAR(i,plane_equation_coefficients);
+                #endif
+
+                #ifdef RESUME_EEPROM_FEATURE
+                i_z = i;
+                /*
+                SERIAL_ECHO_START;
+                SERIAL_ECHOLNPGM("i: ");
+                SERIAL_ECHO(i);
+                SERIAL_ECHOLNPGM("i_z: ");
+                SERIAL_ECHO(i_z);
+                SERIAL_ECHOLN("");
+                */
+                EEPROM_READ_VAR(i,planner_disabled_below_z);
+
+                i_sd = i;
+                /*
+                SERIAL_ECHO_START;
+                SERIAL_ECHOLNPGM("i: ");
+                SERIAL_ECHO(i);
+                SERIAL_ECHOLNPGM("i_z: ");
+                SERIAL_ECHO(i_z);
+                SERIAL_ECHOLN("");
+                */
+                EEPROM_READ_VAR(i,sd_position);
+                #endif
+
+		calculate_volumetric_multipliers();
 		// Call updatePID (similar to when we have processed M301)
 		updatePID();
         SERIAL_ECHO_START;
@@ -318,6 +506,7 @@ void Config_RetrieveSettings()
     else
     {
         Config_ResetDefault();
+        Config_StoreSettings();
     }
     #ifdef EEPROM_CHITCHAT
       Config_PrintSettings();
@@ -335,25 +524,13 @@ void Config_ResetDefault()
         axis_steps_per_unit[i]=tmp1[i];  
         max_feedrate[i]=tmp2[i];  
         max_acceleration_units_per_sq_second[i]=tmp3[i];
+		#ifdef SCARA
+		axis_scaling[i]=1;
+		#endif
     }
     
     // steps per sq second need to be updated to agree with the units per sq second
     reset_acceleration_rates();
-    
-    e1_steps_per_unit=DEFAULT_E1_STEPS_PER_UNIT;
-    
-    // Extruder offset
-    //for(short i=0; i<2; i++)
-    //{
-        //float e_offset_x[] = EXTRUDER_OFFSET_X;
-        //float e_offset_y[] = EXTRUDER_OFFSET_Y;
-        
-        //extruder_offset[0][i]=e_offset_x[i];
-        //extruder_offset[1][i]=e_offset_y[i];
-    //}
-
-
-    
     
     acceleration=DEFAULT_ACCELERATION;
     retract_acceleration=DEFAULT_RETRACT_ACCELERATION;
@@ -363,48 +540,21 @@ void Config_ResetDefault()
     max_xy_jerk=DEFAULT_XYJERK;
     max_z_jerk=DEFAULT_ZJERK;
     max_e_jerk=DEFAULT_EJERK;
-    add_homeing[0] = add_homeing[1] = add_homeing[2] = 0;
+    add_homing[X_AXIS] = add_homing[Y_AXIS] = add_homing[Z_AXIS] = 0;
 #ifdef DELTA
-    endstop_adj[0] = endstop_adj[1] = endstop_adj[2] = 0;
+	endstop_adj[X_AXIS] = endstop_adj[Y_AXIS] = endstop_adj[Z_AXIS] = 0;
+	delta_radius= DELTA_RADIUS;
+	delta_diagonal_rod= DELTA_DIAGONAL_ROD;
+	delta_segments_per_second= DELTA_SEGMENTS_PER_SECOND;
+	recalc_delta_settings(delta_radius, delta_diagonal_rod);
 #endif
 #ifdef ULTIPANEL
     plaPreheatHotendTemp = PLA_PREHEAT_HOTEND_TEMP;
     plaPreheatHPBTemp = PLA_PREHEAT_HPB_TEMP;
     plaPreheatFanSpeed = PLA_PREHEAT_FAN_SPEED;
-    hipsPreheatHotendTemp = HIPS_PREHEAT_HOTEND_TEMP;
-    hipsPreheatHPBTemp = HIPS_PREHEAT_HPB_TEMP;
-    hipsPreheatFanSpeed = HIPS_PREHEAT_FAN_SPEED;
     absPreheatHotendTemp = ABS_PREHEAT_HOTEND_TEMP;
     absPreheatHPBTemp = ABS_PREHEAT_HPB_TEMP;
     absPreheatFanSpeed = ABS_PREHEAT_FAN_SPEED;
-    bridgePreheatHotendTemp = BRIDGE_PREHEAT_HOTEND_TEMP;
-    bridgePreheatHPBTemp = BRIDGE_PREHEAT_HPB_TEMP;
-    bridgePreheatFanSpeed = BRIDGE_PREHEAT_FAN_SPEED;
-    pctpePreheatHotendTemp = PCTPE_PREHEAT_HOTEND_TEMP;
-    pctpePreheatHPBTemp = PCTPE_PREHEAT_HPB_TEMP;
-    pctpePreheatFanSpeed = PCTPE_PREHEAT_FAN_SPEED;
-    alloy_910PreheatHotendTemp = ALLOY_910_PREHEAT_HOTEND_TEMP;
-    alloy_910PreheatHPBTemp = ALLOY_910_PREHEAT_HPB_TEMP;
-    alloy_910PreheatFanSpeed = ALLOY_910_PREHEAT_FAN_SPEED;
-    //~ bambooPreheatHotendTemp = BAMBOO_PREHEAT_HOTEND_TEMP;
-    //~ bambooPreheatHPBTemp = BAMBOO_PREHEAT_HPB_TEMP;
-    //~ bambooPreheatFanSpeed = BAMBOO_PREHEAT_FAN_SPEED;
-    n_ventPreheatHotendTemp = N_VENT_PREHEAT_HOTEND_TEMP;
-    n_ventPreheatHPBTemp = N_VENT_PREHEAT_HPB_TEMP;
-    n_ventPreheatFanSpeed = N_VENT_PREHEAT_FAN_SPEED;
-    laybrickPreheatHotendTemp = LAYBRICK_PREHEAT_HOTEND_TEMP;
-    laybrickPreheatHPBTemp = LAYBRICK_PREHEAT_HPB_TEMP;
-    laybrickPreheatFanSpeed = LAYBRICK_PREHEAT_FAN_SPEED;
-    laywoodPreheatHotendTemp = LAYWOOD_PREHEAT_HOTEND_TEMP;
-    laywoodPreheatHPBTemp = LAYWOOD_PREHEAT_HPB_TEMP;
-    laywoodPreheatFanSpeed = LAYWOOD_PREHEAT_FAN_SPEED;
-    polycarbonatePreheatHotendTemp = POLYCARBONATE_PREHEAT_HOTEND_TEMP;
-    polycarbonatePreheatHPBTemp = POLYCARBONATE_PREHEAT_HPB_TEMP;
-    polycarbonatePreheatFanSpeed = POLYCARBONATE_PREHEAT_FAN_SPEED;
-    tglasePreheatHotendTemp = TGLASE_PREHEAT_HOTEND_TEMP;
-    tglasePreheatHPBTemp = TGLASE_PREHEAT_HPB_TEMP;
-    tglasePreheatFanSpeed = TGLASE_PREHEAT_FAN_SPEED;
-    
 #endif
 #ifdef ENABLE_AUTO_BED_LEVELING
     zprobe_zoffset = -Z_PROBE_OFFSET_FROM_EXTRUDER;
@@ -425,8 +575,43 @@ void Config_ResetDefault()
 #endif//PID_ADD_EXTRUSION_RATE
 #endif//PIDTEMP
 
+#ifdef FWRETRACT
+	autoretract_enabled = false;
+	retract_length = RETRACT_LENGTH;
+#if EXTRUDERS > 1
+	retract_length_swap = RETRACT_LENGTH_SWAP;
+#endif
+	retract_feedrate = RETRACT_FEEDRATE;
+	retract_zlift = RETRACT_ZLIFT;
+	retract_recover_length = RETRACT_RECOVER_LENGTH;
+#if EXTRUDERS > 1
+	retract_recover_length_swap = RETRACT_RECOVER_LENGTH_SWAP;
+#endif
+	retract_recover_feedrate = RETRACT_RECOVER_FEEDRATE;
+#endif
+
+	volumetric_enabled = false;
+	filament_size[0] = DEFAULT_NOMINAL_FILAMENT_DIA;
+#if EXTRUDERS > 1
+	filament_size[1] = DEFAULT_NOMINAL_FILAMENT_DIA;
+#if EXTRUDERS > 2
+	filament_size[2] = DEFAULT_NOMINAL_FILAMENT_DIA;
+#endif
+#endif
+#ifdef ENABLE_AUTO_BED_LEVELING
+        plane_equation_coefficients[0] = 0.0;
+        plane_equation_coefficients[1] = 0.0;
+        plane_equation_coefficients[2] = 0.0;
+#endif
+#ifdef RESUME_EEPROM_FEATURE
+        planner_disabled_below_z = 0.0;
+
+        sd_position = 0;
+#endif
+
+	calculate_volumetric_multipliers();
+
 SERIAL_ECHO_START;
 SERIAL_ECHOLNPGM("Hardcoded Default Settings Loaded");
 
 }
-

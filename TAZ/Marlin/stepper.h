@@ -48,6 +48,11 @@
 extern bool abort_on_endstop_hit;
 #endif
 
+// Switch endstop variables
+#define STD_ENDSTOP_PERIOD 50
+#define HOME_PROBE_ENDSTOP_PERIOD 20
+extern unsigned int endstop_trig_period;
+
 // Initialize and start the stepper motor subsystem
 void st_init();
 
@@ -56,6 +61,7 @@ void st_synchronize();
 
 // Set current position in steps
 void st_set_position(const long &x, const long &y, const long &z, const long &e);
+void st_set_z_position(const long &z);
 void st_set_e_position(const long &e);
 
 // Get current position in steps
@@ -66,13 +72,15 @@ long st_get_position(uint8_t axis);
 float st_get_position_mm(uint8_t axis);
 #endif  //ENABLE_AUTO_BED_LEVELING
 
+extern bool probing;
+
 // The stepper subsystem goes to sleep when it runs out of things to execute. Call this
 // to notify the subsystem that it is time to go to work.
 void st_wake_up();
 
   
-void checkHitEndstops(); //call from somwhere to create an serial error message with the locations the endstops where hit, in case they were triggered
-void endstops_hit_on_purpose(); //avoid creation of the message, i.e. after homeing and before a routine call of checkHitEndstops();
+void checkHitEndstops(); //call from somewhere to create an serial error message with the locations the endstops where hit, in case they were triggered
+void endstops_hit_on_purpose(); //avoid creation of the message, i.e. after homing and before a routine call of checkHitEndstops();
 
 void enable_endstops(bool check); // Enable/disable endstop checking
 
@@ -99,4 +107,3 @@ void microstep_readings();
 
 
 #endif
-
